@@ -200,6 +200,10 @@
   var spinner   = document.getElementById('spinner');
 
   var PDF_URL = 'resume.pdf';
+  var PDF_MIRRORS = [
+    'https://cdn.jsdelivr.net/gh/E-Jxshl/E-Jxshl.github.io@main/resume.pdf',
+    'resume.pdf'
+  ];
   var pdfDoc = null;
   var rendering = false;
   var resizeTimer = null;
@@ -298,16 +302,56 @@
       ? 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
       : 'vendor/pdf.worker.min.js';
 
-    pdfjsLib.getDocument({
-      url: PDF_URL,
-      disableRange: true,
-      disableStream: true,
-      onProgress: function (p) {
-        if (p && p.total) {
-          statusTxt.textContent = '正在加载简历… ' + Math.round(p.loaded / p.total * 100) + '%';
-        }
-      }
-    }).promise.then(function (doc) {
+    // 依次尝试镜像（jsDelivr 快），全部失败则回退本站
+    function fetchWithProgress(url, timeoutMs) {
+      return new Promise(function (resolve, reject) {
+        var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        var timer = setTimeout(function () { if (ctrl) ctrl.abort(); reject(new Error('timeout')); }, timeoutMs);
+        fetch(url, ctrl ? { signal: ctrl.signal } : {}).then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          var total = parseInt(res.headers.get('content-length') || '0', 10);
+          if (!res.body || !res.body.getReader) return res.arrayBuffer();
+          var reader = res.body.getReader();
+          var chunks = [];
+          var loaded = 0;
+          function pump() {
+            return reader.read().then(function (r) {
+              if (r.done) {
+                var out = new Uint8Array(loaded);
+                var off = 0;
+                chunks.forEach(function (c) { out.set(c, off); off += c.length; });
+                return out;
+              }
+              chunks.push(r.value);
+              loaded += r.value.length;
+              if (total > 0) statusTxt.textContent = '正在加载简历… ' + Math.round(loaded / total * 100) + '%';
+              return pump();
+            });
+          }
+          return pump();
+        }).then(function (data) {
+          clearTimeout(timer);
+          resolve(data);
+        }).catch(function (e) {
+          clearTimeout(timer);
+          reject(e);
+        });
+      });
+    }
+
+    function loadDoc(i) {
+      if (i >= PDF_MIRRORS.length) return Promise.reject(new Error('all sources failed'));
+      return fetchWithProgress(PDF_MIRRORS[i], 9000).then(function (data) {
+        return pdfjsLib.getDocument({
+          data: data instanceof Uint8Array ? data : new Uint8Array(data)
+        }).promise;
+      }).catch(function (e) {
+        console.warn('加载失败，切换下一个源：' + PDF_MIRRORS[i], e);
+        return loadDoc(i + 1);
+      });
+    }
+
+    loadDoc(0).then(function (doc) {
       pdfDoc = doc;
       counter.hidden = false;
       counter.textContent = '共 ' + doc.numPages + ' 页';
@@ -348,10 +392,10 @@
   if (document.readyState === 'complete') boot();
   else window.addEventListener('load', boot);
 
-  /* 15 秒仍未完成则启用兜底 */
+  /* 25 秒仍未完成则启用兜底 */
   setTimeout(function () {
     if (!pdfDoc) { nativeFallback(); hideStatus(); }
-  }, 15000);
+  }, 25000);
 })();
 </script>
 </body>
