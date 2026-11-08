@@ -181,7 +181,14 @@
   </footer>
 </main>
 
-<script src="vendor/pdf.min.js"></script>
+<!-- pdf.js 优先走 jsDelivr（国内快），失败则回退到本站 vendor 目录 -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>
+  var PDFJS_FROM_CDN = typeof pdfjsLib !== 'undefined';
+  if (!PDFJS_FROM_CDN) {
+    document.write('<script src="vendor/pdf.min.js"><\/script>');
+  }
+</script>
 <script>
 (function () {
   var pagesEl   = document.getElementById('pages');
@@ -287,7 +294,9 @@
       nativeFallback();
       return;
     }
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_FROM_CDN
+      ? 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+      : 'vendor/pdf.worker.min.js';
 
     pdfjsLib.getDocument({ url: PDF_URL }).promise.then(function (doc) {
       pdfDoc = doc;
