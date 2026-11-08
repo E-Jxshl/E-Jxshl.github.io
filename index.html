@@ -298,7 +298,16 @@
       ? 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
       : 'vendor/pdf.worker.min.js';
 
-    pdfjsLib.getDocument({ url: PDF_URL }).promise.then(function (doc) {
+    pdfjsLib.getDocument({
+      url: PDF_URL,
+      disableRange: true,
+      disableStream: true,
+      onProgress: function (p) {
+        if (p && p.total) {
+          statusTxt.textContent = '正在加载简历… ' + Math.round(p.loaded / p.total * 100) + '%';
+        }
+      }
+    }).promise.then(function (doc) {
       pdfDoc = doc;
       counter.hidden = false;
       counter.textContent = '共 ' + doc.numPages + ' 页';
